@@ -12,6 +12,9 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_comment_downloader import YoutubeCommentDownloader, SORT_BY_POPULAR
 from openai import OpenAI
 
+# venv 환경 실행 명령어
+# source venv/bin/activate
+
 load_dotenv()
 
 client = OpenAI(
@@ -85,44 +88,43 @@ def get_top_comment(video_id):
     return ""
 
 # -------------------------------------------------
-# LLM 분석 (이름/수량/단위 JSON 객체 분해 적용)
+# LLM 분석 (외계어 방지용 깔끔한 프롬프트)
 # -------------------------------------------------
 def extract_recipe_with_llm(transcript_text, comments_text):
     prompt = f"""
-너는 최고 수준의 요리 데이터 엔지니어다.
-제공된 자막과 댓글을 읽고 요리 이름과 재료 목록을 추출해라.
+너는 요리 레시피 데이터를 JSON으로 변환하는 AI야.
+아래 자막과 댓글을 읽고, 요리 이름과 재료 목록을 완벽한 JSON 형식으로만 대답해. 부가 설명은 절대 하지 마.
 
-[중요 지시사항]
-1. 재료 정보를 '이름(name)'과 '수량(amount)' 딱 2가지 속성으로만 분해해서 객체로 만들어라.
-2. 수량(amount)에는 반드시!! 숫자와 '단위(스푼, 개, g, 컵 등)'를 함께 적어라. 
-3. 🔥원본 텍스트에 "고추장 0.5, 간장 1" 처럼 단위 없이 숫자만 적혀 있더라도, 요리 문맥(비율 등)을 파악해서 무조건 "0.5스푼", "1스푼" 처럼 단위를 붙여서 적어라.
-4. 수량 정보가 아예 없다면 빈 문자열("")로 처리해라.
-5. 결과는 반드시 아래 JSON 형식으로만 출력하라.
+[지시사항]
+1. 재료는 'name(이름)'과 'amount(수량과 단위)' 두 가지로만 적어.
+2. amount에는 반드시 숫자와 단위(스푼, 개, g 등)를 같이 적어. (예: "0.5스푼", "1개")
+3. 원본에 단위 없이 숫자만 있다면, 요리 문맥을 파악해서 "스푼" 등을 알아서 붙여줘.
 
-[출력 형식 예시]
+[출력 예시]
 {{
-"recipe_name": "요리이름",
-"ingredients": [
-    {{"name": "양파", "amount": "2개"}},
-    {{"name": "진간장", "amount": "1.5스푼"}},
-    {{"name": "후추", "amount": "약간"}}
-]
+  "recipe_name": "요리이름",
+  "ingredients": [
+    {{"name": "고추장", "amount": "0.5스푼"}},
+    {{"name": "케첩", "amount": "1스푼"}}
+  ]
 }}
 
-자막:
-{transcript_text[:2000]}
-
-댓글:
-{comments_text}
+[데이터]
+자막: {transcript_text[:2000]}
+댓글: {comments_text}
 """
     try:
-        print("    👉 AI 분석 요청 (스마트 냉장고용 데이터 분해 중...)")
+        print("    👉 AI 분석 요청 (외계어 방지 심플 프롬프트 적용...)")
         response = client.chat.completions.create(
             model="llama3.1",
             messages=[{"role":"user","content":prompt}],
-            temperature=0.1
+            temperature=0.1,
+            timeout=180.0
         )
         raw = response.choices[0].message.content
+        
+        print(f"    [DEBUG] AI 원본 응답 미리보기: {raw[:100].replace(chr(10), ' ')}...")
+        
         json_match = re.search(r"\{[\s\S]*\}", raw)
         if json_match:
             return json.loads(json_match.group())
@@ -142,18 +144,13 @@ def process_youtube_recipe(video_id, url):
     cur = conn.cursor()
 
     try:
-        # DB 에러 방지용 체크 (과거 실패 기록 날리기)
+        # DB 에러 방지용 체크 (성공/실패 무조건 스킵)
         cur.execute("SELECT status FROM recipes WHERE video_id=%s", (video_id,))
         row = cur.fetchone()
 
         if row:
-            if row[0] == "SUCCESS":
-                print("⏩ 이미 성공한 영상 스킵")
-                return
-            else:
-                print("🔄 기존 실패 기록 삭제 후 재시도합니다.")
-                cur.execute("DELETE FROM recipes WHERE video_id=%s", (video_id,))
-                conn.commit()
+            print(f"⏩ 이미 처리된 영상 스킵 (상태: {row[0]})")
+            return "SKIP"
 
         status = "SUCCESS"
         transcript_text = ""
@@ -194,35 +191,52 @@ def process_youtube_recipe(video_id, url):
         conn.close()
 
 # -------------------------------------------------
-# 채널 탐색
+# 채널 탐색 (배치 처리 적용)
 # -------------------------------------------------
-def process_channel_videos(channel_url, max_count=10):
-    print("\n📺 채널 탐색 시작:", channel_url)
-    videos = scrapetube.get_channel(channel_url=channel_url, content_type="shorts")
+def process_channel_videos(channel_url, start=1, end=100):
+    print(f"🔍 채널 탐색 시작: {channel_url}")
+    
+    try:
+        # 🚀 에러의 원인이었던 '영상 목록 가져오기' 코드 복구!
+        generator = scrapetube.get_channel(channel_url=channel_url, content_type="shorts")
+        videos = list(generator)
+    except Exception as e:
+        print("❌ 채널 영상 목록을 가져오는 데 실패했습니다:", e)
+        return
+        
+    # start ~ end 구간만큼 자르기
+    target_videos = videos[start - 1 : end]
+    
     processed = 0
-
-    for video in videos:
-        if processed >= max_count:
-            break
-        video_id = video.get("videoId")
+    total_targets = len(target_videos)
+    
+    for video in target_videos:
+        video_id = video.get("videoId") 
         if not video_id:
             continue
+            
         url = f"https://www.youtube.com/watch?v={video_id}"
         
         print("\n======================================")
-        print(f"🎬 {processed+1}/{max_count}")
+        current_num = start + processed
+        print(f"🎬 전체 {current_num}번째 영상 처리 중 (이번 작업: {processed+1}/{total_targets})")
         print("======================================")
         
-        process_youtube_recipe(video_id, url)
+        status = process_youtube_recipe(video_id, url) 
         processed += 1
         
-        sleep = random.uniform(8,15)
-        print(f"⏳ {sleep:.1f}초 대기")
-        time.sleep(sleep)
+        if status == "SKIP":
+            continue
+        
+        sleep_time = random.uniform(20, 40)
+        print(f"⏳ {sleep_time:.1f}초 대기 중...")
+        time.sleep(sleep_time)
 
 # -------------------------------------------------
 # 실행
 # -------------------------------------------------
 if __name__ == "__main__":
     channel = "https://www.youtube.com/@유지만"
-    process_channel_videos(channel, 9999)
+    
+    # 여기서 1, 100 / 101, 200 등 원하는 구간을 입력하세요!
+    process_channel_videos(channel, 1, 50)
