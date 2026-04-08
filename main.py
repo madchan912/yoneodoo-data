@@ -3,7 +3,7 @@ import json
 import re
 import time
 import random
-import psycopg2
+import requests # 🚀 API 통신을 위한 필수 라이브러리 (psycopg2는 삭제됨)
 import scrapetube
 import traceback
 from datetime import datetime
@@ -23,21 +23,8 @@ client = OpenAI(
     timeout=180.0
 )
 
-# -------------------------------------------------
-# DB 연결
-# -------------------------------------------------
-def get_db_connection():
-    try:
-        return psycopg2.connect(
-            host=os.environ.get("DB_HOST", "localhost"),
-            port=os.environ.get("DB_PORT", "5433"),
-            dbname=os.environ.get("DB_NAME", "yoneodoo"),
-            user=os.environ.get("DB_USER", "root"),
-            password=os.environ.get("DB_PASSWORD", "1234")
-        )
-    except Exception as e:
-        print("❌ DB 접속 실패:", e)
-        return None
+# 🚀 백엔드 API 주소 (로컬 기준)
+API_BASE_URL = "http://localhost:8080/api/v1/recipes"
 
 # -------------------------------------------------
 # 자막 추출 (V1.2.4 최신)
@@ -88,7 +75,7 @@ def get_top_comment(video_id):
     return ""
 
 # -------------------------------------------------
-# LLM 분석 (외계어 방지용 깔끔한 프롬프트)
+# LLM 분석 (외계어 방지 및 띄어쓰기 금지 프롬프트)
 # -------------------------------------------------
 def extract_recipe_with_llm(transcript_text, comments_text):
     prompt = f"""
@@ -115,7 +102,7 @@ def extract_recipe_with_llm(transcript_text, comments_text):
 댓글: {comments_text}
 """
     try:
-        print("    👉 AI 분석 요청 (외계어 방지 심플 프롬프트 적용...)")
+        print("    👉 AI 분석 요청 중...")
         response = client.chat.completions.create(
             model="llama3.1",
             messages=[{"role":"user","content":prompt}],
@@ -123,8 +110,6 @@ def extract_recipe_with_llm(transcript_text, comments_text):
             timeout=180.0
         )
         raw = response.choices[0].message.content
-        
-        print(f"    [DEBUG] AI 원본 응답 미리보기: {raw[:100].replace(chr(10), ' ')}...")
         
         json_match = re.search(r"\{[\s\S]*\}", raw)
         if json_match:
@@ -135,28 +120,19 @@ def extract_recipe_with_llm(transcript_text, comments_text):
     return {"recipe_name":"AI 실패", "ingredients":[]}
 
 # -------------------------------------------------
-# 영상 처리
+# 영상 처리 (API 통신 방식)
 # -------------------------------------------------
-def process_youtube_recipe(video_id, url):
+def process_youtube_recipe(video_id, url, existing_videos):
     print(f"\n▶ 영상 분석 시작: {video_id}")
-    conn = get_db_connection()
-    if not conn:
-        return
-    cur = conn.cursor()
+    
+    # 🚀 DB 직접 조회 대신, 메모리에 올려둔 기존 비디오 목록으로 체크
+    if video_id in existing_videos:
+        print(f"⏩ 이미 처리된 영상 스킵 (DB에 존재함)")
+        return "SKIP"
 
     try:
-        # DB 에러 방지용 체크 (성공/실패 무조건 스킵)
-        cur.execute("SELECT status FROM recipes WHERE video_id=%s", (video_id,))
-        row = cur.fetchone()
-
-        if row:
-            print(f"⏩ 이미 처리된 영상 스킵 (상태: {row[0]})")
-            return "SKIP"
-
         status = "SUCCESS"
-        transcript_text = ""
-        comments_text = ""
-
+        
         print("  ▶ 자막 수집")
         transcript_text = get_transcript_safe(video_id)
         if transcript_text == "":
@@ -167,37 +143,42 @@ def process_youtube_recipe(video_id, url):
             comments_text = get_top_comment(video_id)
             print("  ▶ AI 분석")
             result = extract_recipe_with_llm(transcript_text, comments_text)
-            recipe_name = result.get("recipe_name","레시피")
-            ingredients = result.get("ingredients",[])
+            recipe_name = result.get("recipe_name", "레시피")
+            ingredients = result.get("ingredients", [])
             if not ingredients:
                 status = "AI_ERROR"
         else:
             recipe_name = "자막 없음"
             ingredients = []
 
-        print("  ▶ DB 저장")
-        cur.execute("""
-        INSERT INTO recipes
-        (video_id, title, youtube_url, ingredients, created_at, status, transcript)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (
-            video_id, 
-            recipe_name, 
-            url, 
-            json.dumps(ingredients, ensure_ascii=False), 
-            datetime.now(), 
-            status, 
-            transcript_text  # 👈 여기에 자막 원본 텍스트를 추가로 쏙!
-        ))
-        conn.commit()
-        print(f"  🎯 완료: [{recipe_name}] 재료 {len(ingredients)}개 적재 성공!")
+        print("  ▶ 백엔드 API로 데이터 전송")
+        payload = {
+            "videoId": video_id,
+            "title": recipe_name,
+            "youtubeUrl": url,
+            "status": status,
+            "transcript": transcript_text,
+            "ingredients": ingredients
+        }
 
+        # 🚀 백엔드 API로 POST 요청
+        response = requests.post(API_BASE_URL, json=payload)
+        
+        if response.status_code == 200:
+            print(f"  🎯 완료: [{recipe_name}] 재료 {len(ingredients)}개 적재 성공!")
+        else:
+            print(f"  ❌ API 에러 응답: {response.status_code} - {response.text}")
+            status = "API_ERROR"
+
+        return status
+
+    except requests.exceptions.ConnectionError:
+        print("  ❌ 백엔드 서버에 연결할 수 없습니다. Spring Boot 서버가 켜져 있는지 확인하세요.")
+        return "CONNECTION_ERROR"
     except Exception as e:
         print("❌ 영상 처리 실패")
         print(traceback.format_exc())
-    finally:
-        cur.close()
-        conn.close()
+        return "ERROR"
 
 # -------------------------------------------------
 # 채널 탐색 (배치 처리 적용)
@@ -205,17 +186,25 @@ def process_youtube_recipe(video_id, url):
 def process_channel_videos(channel_url, start=1, end=100):
     print(f"🔍 채널 탐색 시작: {channel_url}")
     
+    # 🚀 1. 백엔드에서 이미 처리된 영상 ID 목록을 먼저 가져옵니다.
+    existing_videos = set()
     try:
-        # 🚀 에러의 원인이었던 '영상 목록 가져오기' 코드 복구!
+        print("📡 백엔드에서 기존 레시피 목록을 불러오는 중...")
+        res = requests.get(API_BASE_URL)
+        if res.status_code == 200:
+            existing_videos = {recipe['videoId'] for recipe in res.json() if recipe.get('videoId')}
+            print(f"✅ 기존 데이터 {len(existing_videos)}개 확인 완료 (해당 영상들은 스킵됩니다).")
+    except Exception as e:
+        print("⚠️ 백엔드 기존 데이터 조회 실패 (모두 새로 처리합니다).")
+    
+    try:
         generator = scrapetube.get_channel(channel_url=channel_url, content_type="shorts")
         videos = list(generator)
     except Exception as e:
         print("❌ 채널 영상 목록을 가져오는 데 실패했습니다:", e)
         return
         
-    # start ~ end 구간만큼 자르기
     target_videos = videos[start - 1 : end]
-    
     processed = 0
     total_targets = len(target_videos)
     
@@ -231,10 +220,10 @@ def process_channel_videos(channel_url, start=1, end=100):
         print(f"🎬 전체 {current_num}번째 영상 처리 중 (이번 작업: {processed+1}/{total_targets})")
         print("======================================")
         
-        status = process_youtube_recipe(video_id, url) 
+        status = process_youtube_recipe(video_id, url, existing_videos) 
         processed += 1
         
-        if status == "SKIP":
+        if status in ("SKIP", "CONNECTION_ERROR"):
             continue
         
         sleep_time = random.uniform(20, 40)
@@ -246,6 +235,5 @@ def process_channel_videos(channel_url, start=1, end=100):
 # -------------------------------------------------
 if __name__ == "__main__":
     channel = "https://www.youtube.com/@유지만"
-    
-    # 여기서 1, 100 / 101, 200 등 원하는 구간을 입력하세요!
-    process_channel_videos(channel, 1, 50)
+    # 백엔드(Spring Boot) 서버가 켜져 있어야 작동합니다!
+    process_channel_videos(channel, 51, 55) # 일단 테스트용으로 5개만!
