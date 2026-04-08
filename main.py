@@ -234,6 +234,28 @@ def process_channel_videos(channel_url, start=1, end=100):
 # 실행
 # -------------------------------------------------
 if __name__ == "__main__":
-    channel = "https://www.youtube.com/@유지만"
+    # 🚀 config.json에서 설정값 불러오기
+    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+            
+        TARGET_CHANNEL_URL = config.get("target_channel_url", "https://www.youtube.com/@유지만")
+        START_INDEX = config.get("start_index", 1)
+        END_INDEX = config.get("end_index", 10)
+        
+    except FileNotFoundError:
+        print("⚠️ config.json 파일을 찾을 수 없어 기본값으로 실행합니다.")
+        TARGET_CHANNEL_URL = "https://www.youtube.com/@유지만"
+        START_INDEX = 1
+        END_INDEX = 10
+    except Exception as e:
+        print(f"⚠️ 설정 파일 로드 에러: {e}")
+        exit()
+
+    print(f"📺 대상 채널: {TARGET_CHANNEL_URL}")
+    print(f"🔢 처리 구간: {START_INDEX} ~ {END_INDEX}")
+    
     # 백엔드(Spring Boot) 서버가 켜져 있어야 작동합니다!
-    process_channel_videos(channel, 51, 55) # 일단 테스트용으로 5개만!
+    process_channel_videos(TARGET_CHANNEL_URL, START_INDEX, END_INDEX)
