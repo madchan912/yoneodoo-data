@@ -99,6 +99,7 @@ def extract_recipe_with_llm(transcript_text, comments_text):
 1. 재료는 'name(이름)'과 'amount(수량과 단위)' 두 가지로만 적어.
 2. amount에는 반드시 숫자와 단위(스푼, 개, g 등)를 같이 적어. (예: "0.5스푼", "1개")
 3. 원본에 단위 없이 숫자만 있다면, 요리 문맥을 파악해서 "스푼" 등을 알아서 붙여줘.
+4. name(이름)에는 절대 띄어쓰기를 포함하지 마. 모든 단어를 붙여서 적어. (예: "저당 고추장" -> "저당고추장", "다진 마늘" -> "다진마늘")
 
 [출력 예시]
 {{
@@ -177,9 +178,17 @@ def process_youtube_recipe(video_id, url):
         print("  ▶ DB 저장")
         cur.execute("""
         INSERT INTO recipes
-        (video_id,title,youtube_url,ingredients,created_at,status)
-        VALUES (%s,%s,%s,%s,%s,%s)
-        """, (video_id, recipe_name, url, json.dumps(ingredients,ensure_ascii=False), datetime.now(), status))
+        (video_id, title, youtube_url, ingredients, created_at, status, transcript)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (
+            video_id, 
+            recipe_name, 
+            url, 
+            json.dumps(ingredients, ensure_ascii=False), 
+            datetime.now(), 
+            status, 
+            transcript_text  # 👈 여기에 자막 원본 텍스트를 추가로 쏙!
+        ))
         conn.commit()
         print(f"  🎯 완료: [{recipe_name}] 재료 {len(ingredients)}개 적재 성공!")
 
