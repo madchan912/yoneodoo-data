@@ -3,7 +3,8 @@ import json
 import re
 import time
 import random
-import requests # 🚀 API 통신을 위한 필수 라이브러리 (psycopg2는 삭제됨)
+import urllib.parse # 🚀 URL에서 유튜버 이름(한글)을 예쁘게 뽑아오기 위한 라이브러리 추가
+import requests
 import scrapetube
 import traceback
 from datetime import datetime
@@ -23,8 +24,9 @@ client = OpenAI(
     timeout=180.0
 )
 
-# 🚀 백엔드 API 주소 (로컬 기준)
-API_BASE_URL = "http://localhost:8080/api/v1/recipes"
+# 🚀 백엔드 API 주소 (운영 기준)
+API_BASE_URL = "https://yoneodoo-api.onrender.com/api/v1/recipes"
+
 
 # -------------------------------------------------
 # 자막 추출 (V1.2.4 최신)
@@ -122,10 +124,10 @@ def extract_recipe_with_llm(transcript_text, comments_text):
 # -------------------------------------------------
 # 영상 처리 (API 통신 방식)
 # -------------------------------------------------
-def process_youtube_recipe(video_id, url, existing_videos):
+# 🚀 파라미터에 youtuber_name을 추가로 받도록 수정
+def process_youtube_recipe(video_id, url, existing_videos, youtuber_name):
     print(f"\n▶ 영상 분석 시작: {video_id}")
     
-    # 🚀 DB 직접 조회 대신, 메모리에 올려둔 기존 비디오 목록으로 체크
     if video_id in existing_videos:
         print(f"⏩ 이미 처리된 영상 스킵 (DB에 존재함)")
         return "SKIP"
@@ -158,14 +160,15 @@ def process_youtube_recipe(video_id, url, existing_videos):
             "youtubeUrl": url,
             "status": status,
             "transcript": transcript_text,
-            "ingredients": ingredients
+            "ingredients": ingredients,
+            "youtuberName": youtuber_name  # 🚀 채널 탐색 함수에서 넘겨준 유튜버 이름 안착!
         }
 
         # 🚀 백엔드 API로 POST 요청
         response = requests.post(API_BASE_URL, json=payload)
         
         if response.status_code == 200:
-            print(f"  🎯 완료: [{recipe_name}] 재료 {len(ingredients)}개 적재 성공!")
+            print(f"  🎯 완료: [{recipe_name}] 재료 {len(ingredients)}개 적재 성공! (유튜버: {youtuber_name})")
         else:
             print(f"  ❌ API 에러 응답: {response.status_code} - {response.text}")
             status = "API_ERROR"
@@ -186,7 +189,14 @@ def process_youtube_recipe(video_id, url, existing_videos):
 def process_channel_videos(channel_url, start=1, end=100):
     print(f"🔍 채널 탐색 시작: {channel_url}")
     
-    # 🚀 1. 백엔드에서 이미 처리된 영상 ID 목록을 먼저 가져옵니다.
+    # 🚀 URL에서 '@' 뒤의 유튜버 이름만 쏙 뽑아냅니다. (한글 인코딩 처리 포함)
+    youtuber_name = "알 수 없음"
+    if '@' in channel_url:
+        extracted = channel_url.split('@')[-1]
+        youtuber_name = urllib.parse.unquote(extracted).replace('/', '') # 한글 깨짐 및 슬래시 방지
+    print(f"🧑‍🍳 추출된 유튜버 이름: {youtuber_name}")
+    
+    # 1. 백엔드에서 이미 처리된 영상 ID 목록을 먼저 가져옵니다.
     existing_videos = set()
     try:
         print("📡 백엔드에서 기존 레시피 목록을 불러오는 중...")
@@ -220,7 +230,8 @@ def process_channel_videos(channel_url, start=1, end=100):
         print(f"🎬 전체 {current_num}번째 영상 처리 중 (이번 작업: {processed+1}/{total_targets})")
         print("======================================")
         
-        status = process_youtube_recipe(video_id, url, existing_videos) 
+        # 🚀 여기서 추출한 youtuber_name을 던져줍니다!
+        status = process_youtube_recipe(video_id, url, existing_videos, youtuber_name) 
         processed += 1
         
         if status in ("SKIP", "CONNECTION_ERROR"):
@@ -257,5 +268,4 @@ if __name__ == "__main__":
     print(f"📺 대상 채널: {TARGET_CHANNEL_URL}")
     print(f"🔢 처리 구간: {START_INDEX} ~ {END_INDEX}")
     
-    # 백엔드(Spring Boot) 서버가 켜져 있어야 작동합니다!
     process_channel_videos(TARGET_CHANNEL_URL, START_INDEX, END_INDEX)
