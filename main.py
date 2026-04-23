@@ -16,7 +16,7 @@ from openai import OpenAI
 # venv 환경 실행 명령어
 # source venv/bin/activate
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 client = OpenAI(
     base_url="http://localhost:11434/v1",
@@ -24,8 +24,23 @@ client = OpenAI(
     timeout=180.0
 )
 
-# 🚀 백엔드 API 주소 (운영 기준)
-API_BASE_URL = "https://yoneodoo-api.onrender.com/api/v1/recipes"
+_DEFAULT_RECIPES_API = "http://localhost:8080/api/v1/recipes"
+
+
+def _resolve_recipes_api_base_url() -> str:
+    """
+    .env 또는 환경 변수 API_BASE_URL.
+    - 레시피 목록 GET / POST 모두 동일 베이스 URL 사용 (…/api/v1/recipes).
+    - 비어 있으면 로컬 기본값 사용.
+    """
+    raw = os.environ.get("API_BASE_URL", "").strip()
+    if not raw:
+        print(f"ℹ️  API_BASE_URL 미설정 → 로컬 기본값 사용: {_DEFAULT_RECIPES_API}")
+        return _DEFAULT_RECIPES_API
+    return raw.rstrip("/")
+
+
+API_BASE_URL = _resolve_recipes_api_base_url()
 
 
 # -------------------------------------------------

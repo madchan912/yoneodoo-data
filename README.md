@@ -24,11 +24,14 @@
    ```
 
 ## 🔐 Environment Variables (.env)
-크롤링한 데이터를 적재할 백엔드(API)의 주소를 환경변수로 관리합니다. 루트 디렉토리에 `.env` 파일을 생성하고 아래 값을 설정합니다.
+크롤링한 데이터를 적재할 백엔드 **레시피 API 전체 URL**을 환경변수로 둡니다. `main.py`와 같은 폴더에 `.env`를 만들고 값을 넣습니다. (샘플은 `.env.example` 참고)
+
+`API_BASE_URL`이 없거나 비어 있으면 로컬 기본값 `http://localhost:8080/api/v1/recipes`가 사용됩니다.
+
 ```env
-# 로컬 백엔드(도커 DB) 테스트 시
+# 로컬 백엔드 테스트 시
 API_BASE_URL=http://localhost:8080/api/v1/recipes
 
-# 운영 서버(Render + Neon DB)에 실제 데이터 적재 시
-# API_BASE_URL=https://[Render_App_URL]/api/v1/recipes 
+# 운영 서버(Render 등)에 적재 시
+# API_BASE_URL=https://yoneodoo-api.onrender.com/api/v1/recipes
 ```
