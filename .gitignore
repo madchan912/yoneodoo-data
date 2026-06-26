@@ -5,3 +5,5 @@ cookies.txt
 
 # Crawler Config
 config.json
+
+.DS_Store
