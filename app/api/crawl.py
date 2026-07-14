@@ -4,6 +4,7 @@ from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
 
 from app.pipeline import run_channel_crawl, run_single_video
+from app.crawler.channel import count_channel_videos
 
 router = APIRouter()
 
@@ -79,6 +80,20 @@ def start_crawl_video(req: CrawlVideoRequest, background_tasks: BackgroundTasks)
     }
     background_tasks.add_task(run_single_video, req.video_url, req.youtuber_name, job_id, jobs)
     return {"job_id": job_id, "status": "pending"}
+
+
+@router.get("/channel-info")
+def channel_info(channel_url: str):
+    """채널 전체 숏츠 수를 반환합니다. 크롤링 트리거 UI에서 끝 인덱스 기본값 설정에 사용."""
+    try:
+        total = count_channel_videos(channel_url)
+        print(f"[channel-info] {channel_url} → {total}개")
+        return {"channel_url": channel_url, "total_videos": total}
+    except Exception as e:
+        import traceback
+        print(f"[channel-info] ERROR: {e}")
+        traceback.print_exc()
+        return {"channel_url": channel_url, "total_videos": 0, "error": str(e)}
 
 
 @router.get("/health")
