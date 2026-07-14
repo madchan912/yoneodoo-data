@@ -1,6 +1,7 @@
 import uuid
+import threading
 from datetime import datetime
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.pipeline import run_channel_crawl, run_single_video
@@ -19,7 +20,7 @@ class CrawlRequest(BaseModel):
 
 
 @router.post("/crawl")
-def start_crawl(req: CrawlRequest, background_tasks: BackgroundTasks):
+def start_crawl(req: CrawlRequest):
     job_id = str(uuid.uuid4())
     jobs[job_id] = {
         "job_id": job_id,
@@ -39,9 +40,13 @@ def start_crawl(req: CrawlRequest, background_tasks: BackgroundTasks):
         "finished_at": None,
         "error": None,
     }
-    background_tasks.add_task(
-        run_channel_crawl, req.channel_url, req.start, req.end, job_id, jobs
+    thread = threading.Thread(
+        target=run_channel_crawl,
+        args=(req.channel_url, req.start, req.end, job_id, jobs),
+        daemon=True,
+        name=f"crawl-{job_id[:8]}"
     )
+    thread.start()
     return {"job_id": job_id, "status": "pending"}
 
 
@@ -59,7 +64,7 @@ class CrawlVideoRequest(BaseModel):
 
 
 @router.post("/crawl/video")
-def start_crawl_video(req: CrawlVideoRequest, background_tasks: BackgroundTasks):
+def start_crawl_video(req: CrawlVideoRequest):
     job_id = str(uuid.uuid4())
     jobs[job_id] = {
         "job_id": job_id,
@@ -78,7 +83,13 @@ def start_crawl_video(req: CrawlVideoRequest, background_tasks: BackgroundTasks)
         "finished_at": None,
         "error": None,
     }
-    background_tasks.add_task(run_single_video, req.video_url, req.youtuber_name, job_id, jobs)
+    thread = threading.Thread(
+        target=run_single_video,
+        args=(req.video_url, req.youtuber_name, job_id, jobs),
+        daemon=True,
+        name=f"crawl-video-{job_id[:8]}"
+    )
+    thread.start()
     return {"job_id": job_id, "status": "pending"}
 
 

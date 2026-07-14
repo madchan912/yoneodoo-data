@@ -13,6 +13,16 @@ from app.llm.gemini import extract_recipe
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8080/api/v1/recipes")
 
 
+def _is_blocked(e: Exception) -> bool:
+    """IP 차단 / 봇 감지 예외 여부를 확인합니다."""
+    name = type(e).__name__.lower()
+    msg = str(e).lower()
+    return (
+        'blocked' in name or
+        any(k in msg for k in ('blocked', '429', 'bot', 'captcha', 'sign in to confirm'))
+    )
+
+
 def _post_recipe(
     video_id: str,
     url: str,
@@ -48,30 +58,53 @@ def process_video(video_id: str, url: str, existing_ids: set, youtuber_name: str
         print("  ⏩ 스킵 (DB 존재)")
         return "SKIP"
 
-    # 1. 자막 수집
+    # 1. 자막 수집 — IP 차단이면 상위로 전파, 그 외 실패는 빈 문자열로 처리
     print("  ▶ 자막 수집")
-    transcript = get_transcript(video_id)
+    try:
+        transcript = get_transcript(video_id) or ""
+    except Exception as e:
+        if _is_blocked(e):
+            raise
+        print(f"  ⚠️ 자막 수집 실패: {e} → description/댓글로 계속 진행")
+        transcript = ""
 
-    if not transcript:
-        print("  ⚠️ 자막 없음 → NO_SUBTITLES")
+    # 2. 더보기(description) — IP 차단이면 상위로 전파
+    print("  ▶ description 수집")
+    try:
+        description = get_description(video_id) or ""
+    except Exception as e:
+        if _is_blocked(e):
+            raise
+        print(f"  ⚠️ description 수집 실패: {e}")
+        description = ""
+
+    # 3. 댓글 — IP 차단이면 상위로 전파
+    print("  ▶ 댓글 수집")
+    try:
+        comment = get_top_comment(video_id) or ""
+    except Exception as e:
+        if _is_blocked(e):
+            raise
+        print(f"  ⚠️ 댓글 수집 실패: {e}")
+        comment = ""
+
+    # 4. 세 소스 모두 비어있으면 Gemini 호출 없이 NO_SUBTITLES
+    if not transcript and not description and not comment:
+        print("  ⚠️ 모든 소스 없음 → NO_SUBTITLES")
         _post_recipe(video_id, url, youtuber_name, "자막 없음", [], "NO_SUBTITLES", "")
         return "NO_SUBTITLES"
 
-    # 2. 더보기(description) + 댓글 수집 — 실패해도 계속 진행
-    print("  ▶ description 수집")
-    description = get_description(video_id)
-
-    print("  ▶ 댓글 수집")
-    comment = get_top_comment(video_id)
-
-    # 3. Gemini 분석
+    # 5. Gemini 분석
     print("  ▶ Gemini 분석")
     result = extract_recipe(transcript, description, comment)
     recipe_name = result.get("recipe_name", "레시피")
     ingredients = result.get("ingredients", [])
 
     if not ingredients:
-        status = "AI_ERROR"
+        # 소스는 있었지만 Gemini가 재료를 찾지 못함 → NO_SUBTITLES
+        print("  ⚠️ Gemini 재료 없음 → NO_SUBTITLES")
+        _post_recipe(video_id, url, youtuber_name, recipe_name or "자막 없음", [], "NO_SUBTITLES", transcript)
+        return "NO_SUBTITLES"
     elif any(i.get("amount") is None for i in ingredients):
         status = "NEEDS_REVIEW"
     else:
@@ -134,7 +167,7 @@ def run_channel_crawl(channel_url: str, start: int, end: int, job_id: str, jobs:
             if status == "SKIP":
                 continue
 
-            sleep_time = random.uniform(20, 40)
+            sleep_time = random.uniform(30, 60)
             print(f"  ⏳ {sleep_time:.1f}초 대기")
             time.sleep(sleep_time)
 
@@ -142,9 +175,14 @@ def run_channel_crawl(channel_url: str, start: int, end: int, job_id: str, jobs:
         print(f"\n✅ 크롤링 완료: {jobs[job_id]['results']}")
 
     except Exception as e:
-        jobs[job_id]["status"] = "failed"
-        jobs[job_id]["error"] = str(e)
-        print(f"❌ 크롤링 실패: {e}")
+        if _is_blocked(e):
+            jobs[job_id]["status"] = "blocked"
+            jobs[job_id]["error"] = "IP 차단 감지, 크롤링 중단"
+            print(f"⛔ IP 차단 감지, 크롤링 중단: {e}")
+        else:
+            jobs[job_id]["status"] = "failed"
+            jobs[job_id]["error"] = str(e)
+            print(f"❌ 크롤링 실패: {e}")
 
     finally:
         jobs[job_id]["finished_at"] = datetime.utcnow().isoformat()
