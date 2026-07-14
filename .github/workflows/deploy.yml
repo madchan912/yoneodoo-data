@@ -1,0 +1,41 @@
+name: Deploy Data Pipeline to EC2
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH → git pull → docker build → restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            # 첫 배포 시 clone, 이후엔 pull
+            if [ ! -d /home/ubuntu/yoneodoo-data ]; then
+              git clone https://github.com/madchan912/yoneodoo-data.git /home/ubuntu/yoneodoo-data
+            fi
+
+            cd /home/ubuntu/yoneodoo-data
+            git pull origin main
+
+            docker build -t yoneodoo-data .
+
+            docker stop yoneodoo-data || true
+            docker rm   yoneodoo-data || true
+
+            docker run -d \
+              --name yoneodoo-data \
+              -p 8000:8000 \
+              --env-file /home/ubuntu/.env.data.prod \
+              --restart unless-stopped \
+              yoneodoo-data
