@@ -29,5 +29,8 @@ def get_transcript(video_id: str) -> str:
         return " ".join([t.text for t in data])
 
     except Exception as e:
+        if type(e).__name__ == 'RequestBlocked':
+            print(f"    ⛔ IP 차단 감지 (RequestBlocked) — 상위로 전파")
+            raise
         print(f"    ❌ 자막 추출 실패: {type(e).__name__} - {e}")
         return ""
