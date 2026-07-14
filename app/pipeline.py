@@ -7,7 +7,7 @@ from datetime import datetime
 from app.crawler.transcript import get_transcript
 from app.crawler.description import get_description
 from app.crawler.comment import get_top_comment
-from app.crawler.channel import get_youtuber_name, get_existing_video_ids, get_channel_videos
+from app.crawler.channel import get_youtuber_name, get_existing_video_ids, get_channel_videos, is_daily_limit_exceeded
 from app.llm.gemini import extract_recipe
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8080/api/v1/recipes")
@@ -108,10 +108,17 @@ def run_channel_crawl(channel_url: str, start: int, end: int, job_id: str, jobs:
         print(f"🧑‍🍳 유튜버: {youtuber_name}")
 
         existing_ids = get_existing_video_ids(API_BASE_URL)
-        videos = get_channel_videos(channel_url, start, end)
+        videos, total_videos = get_channel_videos(channel_url, start, end)
         jobs[job_id]["total"] = len(videos)
+        jobs[job_id]["total_videos"] = total_videos
+        print(f"📊 채널 전체 숏츠: {total_videos}개 / 이번 범위: {len(videos)}개")
 
         for video in videos:
+            # Gemini 일일 한도 체크 — 초과 시 크롤링 중단
+            if is_daily_limit_exceeded(jobs):
+                jobs[job_id]["error"] = f"Gemini 일일 한도(1400건) 초과로 중단"
+                break
+
             video_id = video.get("videoId")
             if not video_id:
                 continue
