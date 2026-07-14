@@ -25,6 +25,7 @@ def start_crawl(req: CrawlRequest, background_tasks: BackgroundTasks):
         "status": "pending",
         "channel_url": req.channel_url,
         "total": req.end - req.start + 1,
+        "total_videos": 0,  # 채널 전체 숏츠 수 — run_channel_crawl에서 실제 값으로 갱신됨
         "processed": 0,
         "results": {
             "SUCCESS": 0,
