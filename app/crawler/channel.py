@@ -45,6 +45,15 @@ def get_channel_videos(channel_url: str, start: int, end: int) -> tuple[list, in
         return [], 0
 
 
+def count_channel_videos(channel_url: str) -> int:
+    """채널 전체 숏츠 수를 반환합니다. channel-info 엔드포인트 전용."""
+    try:
+        return len(list(scrapetube.get_channel(channel_url=channel_url, content_type="shorts")))
+    except Exception as e:
+        print(f"❌ 채널 영상 수 조회 실패: {e}")
+        return 0
+
+
 def count_today_gemini_calls(jobs: dict) -> int:
     """오늘 날짜 기준 Gemini API 실제 호출 건수를 in-memory jobs에서 집계합니다.
 
