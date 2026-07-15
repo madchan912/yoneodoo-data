@@ -55,6 +55,29 @@ def send_batch_report(summary: dict) -> None:
     if failed > 0:
         embed["fields"].append({"name": "💀 FAILED", "value": str(failed), "inline": True})
 
+    youtubers = summary.get("youtubers", [])
+    if youtubers:
+        lines = []
+        for y in youtubers:
+            yname = y.get("name", "?")
+            ystatus = y.get("status")
+            r = y.get("results", {})
+            if ystatus == "blocked":
+                lines.append(f"⛔ {yname}: BLOCKED (크롤링 중단)")
+            elif ystatus == "failed":
+                lines.append(f"💀 {yname}: FAILED")
+            else:
+                parts = [
+                    f"{k} {r[k]}" for k in ("SUCCESS", "NEEDS_REVIEW", "NO_SUBTITLES", "AI_ERROR")
+                    if r.get(k, 0) > 0
+                ]
+                lines.append(f"✅ {yname}: {' / '.join(parts) if parts else 'SKIP'}")
+        embed["fields"].append({
+            "name": "📋 유튜버별 결과",
+            "value": "\n".join(lines)[:1024],
+            "inline": False,
+        })
+
     try:
         res = requests.post(DISCORD_WEBHOOK_URL, json={"embeds": [embed]}, timeout=10)
         if res.status_code in (200, 204):

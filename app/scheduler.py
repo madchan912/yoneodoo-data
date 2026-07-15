@@ -55,6 +55,7 @@ def _batch_crawl() -> None:
         "SKIP": 0,
         "blocked": 0,
         "failed": 0,
+        "youtubers": [],
     }
 
     for y in youtubers:
@@ -94,6 +95,12 @@ def _batch_crawl() -> None:
             summary[k] += results.get(k, 0)
 
         status = job.get("status")
+        summary["youtubers"].append({
+            "name": name,
+            "status": status,
+            "results": dict(results),
+        })
+
         if status == "blocked":
             summary["blocked"] += 1
             print(f"⛔ [배치] {name} IP 차단 감지 — 배치 전체 중단")
