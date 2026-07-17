@@ -45,6 +45,22 @@ _PROMPT_TEMPLATE = """\
 첫번째 댓글: {comment}
 """
 
+_PROMPT_NUTRITION = """\
+아래 식재료의 100g 기준 영양성분을 JSON으로 알려줘.
+확실하지 않거나 모르면 해당 값을 null로 반환해. 절대 추측하지 마.
+재료명: {name}
+형식:
+{{
+  "calories": 숫자 또는 null,
+  "protein": 숫자 또는 null,
+  "fat": 숫자 또는 null,
+  "saturated_fat": 숫자 또는 null,
+  "carbohydrate": 숫자 또는 null,
+  "sugar": 숫자 또는 null,
+  "sodium": 숫자 또는 null
+}}
+JSON만 반환."""
+
 
 def extract_recipe(transcript: str, description: str, comment: str) -> dict:
     prompt = _PROMPT_TEMPLATE.format(
@@ -62,3 +78,18 @@ def extract_recipe(transcript: str, description: str, comment: str) -> dict:
         print(f"    ❌ Gemini 분석 실패: {type(e).__name__} - {e}")
 
     return {"recipe_name": "AI 실패", "ingredients": []}
+
+
+def extract_nutrition(ingredient_name: str) -> dict:
+    """재료명에 대한 100g 기준 영양성분을 Gemini로 추정합니다."""
+    prompt = _PROMPT_NUTRITION.format(name=ingredient_name)
+    try:
+        response = _get_client().models.generate_content(model=_MODEL, contents=prompt)
+        raw = response.text
+        match = re.search(r"\{[\s\S]*\}", raw)
+        if match:
+            return json.loads(match.group())
+    except Exception as e:
+        print(f"    ❌ Gemini 영양성분 추정 실패: {type(e).__name__} - {e}")
+
+    return {}
