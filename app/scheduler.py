@@ -49,7 +49,7 @@ def _batch_crawl() -> None:
         "youtuber_count": len(youtubers),
         "total_processed": 0,
         "SUCCESS": 0,
-        "NEEDS_REVIEW": 0,
+        "INCOMPLETE": 0,
         "NO_SUBTITLES": 0,
         "AI_ERROR": 0,
         "SKIP": 0,
@@ -74,7 +74,7 @@ def _batch_crawl() -> None:
             "processed": 0,
             "results": {
                 "SUCCESS": 0,
-                "NEEDS_REVIEW": 0,
+                "INCOMPLETE": 0,
                 "NO_SUBTITLES": 0,
                 "AI_ERROR": 0,
                 "SKIP": 0,
@@ -91,7 +91,7 @@ def _batch_crawl() -> None:
         job = jobs[job_id]
         results = job.get("results", {})
         summary["total_processed"] += job.get("processed", 0)
-        for k in ("SUCCESS", "NEEDS_REVIEW", "NO_SUBTITLES", "AI_ERROR", "SKIP"):
+        for k in ("SUCCESS", "INCOMPLETE", "NO_SUBTITLES", "AI_ERROR", "SKIP"):
             summary[k] += results.get(k, 0)
 
         status = job.get("status")

@@ -63,7 +63,7 @@ send_batch_report({
     "youtuber_count": 3,
     "total_processed": 42,
     "SUCCESS": 28,
-    "NEEDS_REVIEW": 7,
+    "INCOMPLETE": 7,
     "NO_SUBTITLES": 5,
     "AI_ERROR": 0,
     "SKIP": 2,

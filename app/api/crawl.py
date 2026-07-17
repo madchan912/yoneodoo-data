@@ -31,7 +31,7 @@ def start_crawl(req: CrawlRequest):
         "processed": 0,
         "results": {
             "SUCCESS": 0,
-            "NEEDS_REVIEW": 0,
+            "INCOMPLETE": 0,
             "NO_SUBTITLES": 0,
             "AI_ERROR": 0,
             "SKIP": 0,
@@ -74,7 +74,7 @@ def start_crawl_video(req: CrawlVideoRequest):
         "processed": 0,
         "results": {
             "SUCCESS": 0,
-            "NEEDS_REVIEW": 0,
+            "INCOMPLETE": 0,
             "NO_SUBTITLES": 0,
             "AI_ERROR": 0,
             "SKIP": 0,

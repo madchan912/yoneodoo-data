@@ -19,7 +19,7 @@ def send_batch_report(summary: dict) -> None:
     youtuber_count = summary.get("youtuber_count", 0)
     total = summary.get("total_processed", 0)
     success = summary.get("SUCCESS", 0)
-    needs_review = summary.get("NEEDS_REVIEW", 0)
+    incomplete = summary.get("INCOMPLETE", 0)
     no_subtitles = summary.get("NO_SUBTITLES", 0)
     ai_error = summary.get("AI_ERROR", 0)
     skip = summary.get("SKIP", 0)
@@ -42,7 +42,7 @@ def send_batch_report(summary: dict) -> None:
             {"name": "🎬 총 처리 영상", "value": f"{total}개", "inline": True},
             {"name": "​", "value": "​", "inline": True},
             {"name": "✅ SUCCESS", "value": str(success), "inline": True},
-            {"name": "🔍 NEEDS_REVIEW", "value": str(needs_review), "inline": True},
+            {"name": "🔍 INCOMPLETE", "value": str(incomplete), "inline": True},
             {"name": "🔇 NO_SUBTITLES", "value": str(no_subtitles), "inline": True},
             {"name": "❌ AI_ERROR", "value": str(ai_error), "inline": True},
             {"name": "⏩ SKIP", "value": str(skip), "inline": True},
@@ -68,7 +68,7 @@ def send_batch_report(summary: dict) -> None:
                 lines.append(f"💀 {yname}: FAILED")
             else:
                 parts = [
-                    f"{k} {r[k]}" for k in ("SUCCESS", "NEEDS_REVIEW", "NO_SUBTITLES", "AI_ERROR")
+                    f"{k} {r[k]}" for k in ("SUCCESS", "INCOMPLETE", "NO_SUBTITLES", "AI_ERROR")
                     if r.get(k, 0) > 0
                 ]
                 lines.append(f"✅ {yname}: {' / '.join(parts) if parts else 'SKIP'}")
