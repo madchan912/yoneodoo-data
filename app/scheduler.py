@@ -86,7 +86,8 @@ def _batch_crawl() -> None:
 
         print(f"\n🎬 [배치] {name} 크롤링 시작")
         # APScheduler 스레드 안에서 동기 호출 — 한 채널씩 순차 처리
-        run_channel_crawl(channel_url, 1, 50, job_id, jobs)
+        # youtuber_name은 watched_youtubers 등록명을 그대로 사용(URL 파싱 폴백 방지)
+        run_channel_crawl(channel_url, 1, 50, job_id, jobs, youtuber_name=name)
 
         job = jobs[job_id]
         results = job.get("results", {})
@@ -121,10 +122,12 @@ def _discord_report() -> None:
 
 
 def start_scheduler() -> None:
-    _scheduler.add_job(_batch_crawl, CronTrigger(hour=3, minute=0), id="batch_crawl")
+    # EC2가 YouTube IP 차단으로 자동 배치를 실행할 수 없어 로컬 PC 수동 배치(POST /batch/run)로 전환.
+    # _batch_crawl 로직 자체는 보존 — 필요 시 아래 주석만 해제하면 자동 배치 복원 가능.
+    # _scheduler.add_job(_batch_crawl, CronTrigger(hour=3, minute=0), id="batch_crawl")
     _scheduler.add_job(_discord_report, CronTrigger(hour=7, minute=0), id="discord_report")
     _scheduler.start()
-    print("✅ 스케줄러 시작 (매일 03:00 배치, 07:00 Discord 리포트)")
+    print("✅ 스케줄러 시작 (자동 배치 비활성화 — 수동 배치만 사용, 07:00 Discord 리포트)")
 
 
 def stop_scheduler() -> None:

@@ -17,6 +17,7 @@ class CrawlRequest(BaseModel):
     channel_url: str
     start: int = 1
     end: int = 50
+    youtuber_name: str = ""
 
 
 @router.post("/crawl")
@@ -43,6 +44,7 @@ def start_crawl(req: CrawlRequest):
     thread = threading.Thread(
         target=run_channel_crawl,
         args=(req.channel_url, req.start, req.end, job_id, jobs),
+        kwargs={"youtuber_name": req.youtuber_name or None},
         daemon=True,
         name=f"crawl-{job_id[:8]}"
     )
