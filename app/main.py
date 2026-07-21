@@ -11,6 +11,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 from app.api.crawl import router as crawl_router
+from app.api.batch import router as batch_router
 from app.scheduler import start_scheduler, stop_scheduler
 
 
@@ -23,3 +24,4 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="YoNeoDoo Data Pipeline", version="2.0.0", lifespan=lifespan)
 app.include_router(crawl_router)
+app.include_router(batch_router)

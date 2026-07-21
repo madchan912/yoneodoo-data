@@ -273,12 +273,19 @@ def run_single_video(video_url: str, youtuber_name: str, job_id: str, jobs: dict
         jobs[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
 
 
-def run_channel_crawl(channel_url: str, start: int, end: int, job_id: str, jobs: dict) -> None:
+def run_channel_crawl(channel_url: str, start: int, end: int, job_id: str, jobs: dict,
+                       youtuber_name: str | None = None) -> None:
+    """채널 숏츠를 크롤링합니다.
+
+    youtuber_name을 명시적으로 전달하면(watched_youtubers.youtuber_name) 그 이름을 그대로 사용하고,
+    생략하면 채널 URL의 @handle을 폴백으로 사용합니다(단건 수동 크롤링 등 이름 정보가 없는 경우).
+    """
     jobs[job_id]["status"] = "running"
 
     try:
         print(f"\n🔍 채널 크롤링 시작: {channel_url} ({start}~{end})")
-        youtuber_name = get_youtuber_name(channel_url)
+        if not youtuber_name:
+            youtuber_name = get_youtuber_name(channel_url)
         print(f"🧑‍🍳 유튜버: {youtuber_name}")
 
         existing_ids = get_existing_video_ids(API_BASE_URL)

@@ -7,17 +7,15 @@ from datetime import date
 GEMINI_DAILY_LIMIT = 1400
 
 
-# 채널 URL handle → 표시 이름 수동 매핑 (자동 추출명이 부자연스러운 경우)
-_CHANNEL_NAME_MAP = {
-    "1mindiet": "1분다이어터",
-}
-
-
 def get_youtuber_name(channel_url: str) -> str:
+    """채널 URL의 @handle을 표시 이름으로 사용하는 폴백입니다.
+
+    watched_youtubers에 등록된 정식 youtuber_name이 있으면 항상 그쪽을 우선 사용해야 하며,
+    이 함수는 호출 측이 이름을 명시적으로 전달하지 않은 경우에만 사용합니다.
+    """
     if "@" in channel_url:
         handle = channel_url.split("@")[-1].split("/")[0]
-        handle = urllib.parse.unquote(handle)
-        return _CHANNEL_NAME_MAP.get(handle, handle)
+        return urllib.parse.unquote(handle)
     return "알 수 없음"
 
 
